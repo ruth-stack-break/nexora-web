@@ -725,8 +725,18 @@ const UnifiedPortal: React.FC<{ onSelect: (inst: Institution) => void, onSuperAd
   const handleEnter = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code.trim()) return;
-    const inst = await db.getInstitutionByCode(code);
+
+    let inst = await db.getInstitutionByCode(code);
+
+    // Auto-seed for dev convenience if not found
+    if (!inst) {
+      console.log("Institution not found, attempting to seed defaults...");
+      await db.seedDefaults();
+      inst = await db.getInstitutionByCode(code);
+    }
+
     if (inst) {
+      localStorage.setItem('last_institution_code', inst.code);
       onSelect(inst);
     } else {
       alert("Invalid Institution Code. Please check and try again.");
@@ -962,6 +972,49 @@ const App: React.FC = () => {
     else if (currentView === ViewType.JOB_PORTAL) setPosts(await db.getPosts(currentInstitution.id, 'JOB'));
     else if (currentView === ViewType.EVENTS) setPosts(await db.getPosts(currentInstitution.id, 'EVENTS'));
   };
+
+  useEffect(() => {
+    // Auth Listener
+    const unsubscribe = db.subscribeToAuth(async (user) => {
+      if (user) {
+        setCurrentUser(user);
+        // If user has an institution, load it
+        if (user.institutionId && user.institutionId !== 'squadran') { // 'squadran' is system
+          // We might need a direct getInstitutionById or search.
+          // Since we don't have getInstitutionById exposed in db (only ByCode), we can reuse getInstitutions or add one.
+          // Efficient way: getInstitutions() and find? Or just find by code if we knew it.
+          // User profile has institutionId.
+          const allInsts = await db.getInstitutions();
+          const inst = allInsts.find(i => i.id === user.institutionId);
+          if (inst) setCurrentInstitution(inst);
+        }
+        if (user.role === UserRole.SUPER_ADMIN) {
+          setIsSuperAdminMode(true);
+        }
+        setCurrentView(user.role === UserRole.INSTITUTION_ADMIN ? ViewType.ADMIN_DASHBOARD : ViewType.NEWSLETTER);
+      } else {
+        setCurrentUser(null);
+        // Try to restore institution from local storage if no user
+        const lastCode = localStorage.getItem('last_institution_code');
+        if (lastCode && !currentInstitution) {
+          const inst = await db.getInstitutionByCode(lastCode);
+          if (inst) setCurrentInstitution(inst);
+        }
+      }
+    });
+
+    // Check localStorage for institution immediately on mount too
+    const init = async () => {
+      const lastCode = localStorage.getItem('last_institution_code');
+      if (lastCode) {
+        const inst = await db.getInstitutionByCode(lastCode);
+        if (inst) setCurrentInstitution(inst);
+      }
+    };
+    init();
+
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     refreshPosts();

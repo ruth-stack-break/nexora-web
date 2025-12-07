@@ -4,7 +4,7 @@ import {
     query, where, orderBy, Timestamp
 } from "firebase/firestore";
 import {
-    signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut
+    signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, User
 } from "firebase/auth";
 import { UserProfile, Post, UserRole, Comment, Message, Institution, OnboardingRequest } from '../types';
 
@@ -12,7 +12,83 @@ import { UserProfile, Post, UserRole, Comment, Message, Institution, OnboardingR
 const mapDoc = <T>(doc: any): T => ({ id: doc.id, ...doc.data() } as T);
 
 export const db = {
+    // --- Auth State & Persistence ---
+    subscribeToAuth: (callback: (user: UserProfile | null) => void) => {
+        return onAuthStateChanged(auth, async (firebaseUser) => {
+            if (firebaseUser) {
+                // Fetch full profile
+                const snap = await getDoc(doc(firestore, "users", firebaseUser.uid));
+                if (snap.exists()) {
+                    const profile = snap.data() as UserProfile;
+                    if (profile.blocked) {
+                        await signOut(auth);
+                        callback(null);
+                    } else {
+                        callback(profile);
+                    }
+                } else {
+                    // User might be super admin (not in users collection typically, or handled differently)
+                    // But here we rely on users collection. 
+                    // If super admin login used a real auth account, we'd need it in Firestore too.
+                    // For now, return null if not in 'users'.
+                    callback(null);
+                }
+            } else {
+                callback(null);
+            }
+        });
+    },
+
+    logout: async () => {
+        await signOut(auth);
+    },
+
     // --- Squadran Super Admin ---
+    seedDefaults: async (): Promise<void> => {
+        const DEFAULT_INSTITUTIONS: Institution[] = [
+            {
+                id: 'inst_nfsu',
+                name: 'NFSU Social',
+                code: 'NFSU',
+                logo: 'https://cdn-icons-png.flaticon.com/512/3413/3413535.png',
+                description: 'National Forensic Sciences University',
+                themeColor: '#FF725E'
+            },
+            {
+                id: 'inst_iit',
+                name: 'IIT Delhi Connect',
+                code: 'IITD',
+                logo: 'https://cdn-icons-png.flaticon.com/512/2997/2997274.png',
+                description: 'Indian Institute of Technology Delhi',
+                themeColor: '#6C63FF'
+            }
+        ];
+
+        for (const inst of DEFAULT_INSTITUTIONS) {
+            const ref = doc(firestore, "institutions", inst.id);
+            const snap = await getDoc(ref);
+            if (!snap.exists()) {
+                await setDoc(ref, inst);
+                // Create welcome post
+                const postRef = doc(collection(firestore, "posts"));
+                await setDoc(postRef, {
+                    id: postRef.id,
+                    institutionId: inst.id,
+                    authorId: 'system',
+                    authorName: `${inst.code} Admin`,
+                    authorRole: 'INSTITUTION_ADMIN',
+                    title: `Welcome to ${inst.name}`,
+                    content: `Welcome to the official ${inst.name} hub.`,
+                    timestamp: Date.now(),
+                    likes: 100,
+                    comments: [],
+                    status: 'VERIFIED',
+                    type: 'NEWSLETTER'
+                });
+            }
+        }
+    },
+
     loginSuperAdmin: async (password: string): Promise<boolean> => {
         try {
             // In a real app, super admin should have a specific email
