@@ -1,48 +1,52 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Squadran Innovation Lab</title>
-    <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/3413/3413535.png" />
-    
-    <!-- Base64 Encoded Empty JSON Manifest: {} -->
-    <!-- This completely prevents 401 errors and Syntax Errors on Vercel/Netlify -->
-    <link rel="manifest" href="data:application/manifest+json;base64,e30=" />
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Nunito', 'sans-serif'],
-            },
-            colors: {
-              primary: '#6C63FF',
-              secondary: '#FF6584',
-              accent: '#43D9AD',
-              warning: '#FFC75F',
-              'brand-orange': '#FF725E',
-              'brand-blue': '#4AA4F2',
-              'brand-dark': '#1E1E2F',
-            },
-            animation: {
-              'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
-            },
-            keyframes: {
-              fadeInUp: {
-                '0%': { opacity: '0', transform: 'translateY(20px)' },
-                '100%': { opacity: '1', transform: 'translateY(0)' },
-              }
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Squadran Innovation Lab</title>
+  <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/3413/3413535.png" />
+
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="/pwa-192x192.png" />
+
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Nunito', 'sans-serif'],
+          },
+          colors: {
+            primary: '#6C63FF',
+            secondary: '#FF6584',
+            accent: '#43D9AD',
+            warning: '#FFC75F',
+            'brand-orange': '#FF725E',
+            'brand-blue': '#4AA4F2',
+            'brand-dark': '#1E1E2F',
+          },
+          animation: {
+            'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
+          },
+          keyframes: {
+            fadeInUp: {
+              '0%': { opacity: '0', transform: 'translateY(20px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
             }
           }
         }
       }
-    </script>
- 
-<script type="importmap">
+    }
+  </script>
+
+  <script type="importmap">
 {
   "imports": {
     "react": "https://aistudiocdn.com/react@^19.2.0",
@@ -55,9 +59,11 @@
 }
 </script>
 </head>
-  <body class="bg-gray-50 text-slate-800 antialiased selection:bg-brand-orange selection:text-white overflow-x-hidden">
-    <div id="root"></div>
-    <!-- Vite Entry Point -->
-    <script type="module" src="/index.tsx"></script>
-  </body>
+
+<body class="bg-gray-50 text-slate-800 antialiased selection:bg-brand-orange selection:text-white overflow-x-hidden">
+  <div id="root"></div>
+  <!-- Vite Entry Point -->
+  <script type="module" src="/index.tsx"></script>
+</body>
+
 </html>

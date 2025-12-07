@@ -141,20 +141,20 @@ const DEFAULT_REQUESTS: OnboardingRequest[] = [
 
 export const db = {
   // --- Squadran Super Admin ---
-  loginSuperAdmin: (password: string): boolean => {
-    return password === 'squadran_root';
+  loginSuperAdmin: (password: string): Promise<boolean> => {
+    return Promise.resolve(password === 'squadran_root');
   },
 
-  getInstitutions: (): Institution[] => {
-    return loadData(STORAGE_KEYS.INSTITUTIONS, DEFAULT_INSTITUTIONS);
+  getInstitutions: (): Promise<Institution[]> => {
+    return Promise.resolve(loadData(STORAGE_KEYS.INSTITUTIONS, DEFAULT_INSTITUTIONS));
   },
 
-  getInstitutionByCode: (code: string): Institution | undefined => {
+  getInstitutionByCode: (code: string): Promise<Institution | undefined> => {
     const insts = loadData<Institution>(STORAGE_KEYS.INSTITUTIONS, DEFAULT_INSTITUTIONS);
-    return insts.find(i => i.code.trim().toUpperCase() === code.trim().toUpperCase());
+    return Promise.resolve(insts.find(i => i.code.trim().toUpperCase() === code.trim().toUpperCase()));
   },
 
-  createInstitution: (name: string, code: string, logo: string, desc: string, themeColor: string = '#4AA4F2'): Institution => {
+  createInstitution: (name: string, code: string, logo: string, desc: string, themeColor: string = '#4AA4F2'): Promise<Institution> => {
     const insts = loadData<Institution>(STORAGE_KEYS.INSTITUTIONS, DEFAULT_INSTITUTIONS);
     const users = loadData<UserProfile>(STORAGE_KEYS.USERS, DEFAULT_USERS);
     const posts = loadData<Post>(STORAGE_KEYS.POSTS, DEFAULT_POSTS);
@@ -168,7 +168,7 @@ export const db = {
       themeColor: themeColor
     };
     insts.push(newInst);
-    
+
     // Create a default admin for this institution automatically
     const adminId = `admin_${newInst.id}`;
     users.push({
@@ -200,10 +200,10 @@ export const db = {
     saveData(STORAGE_KEYS.USERS, users);
     saveData(STORAGE_KEYS.POSTS, posts);
 
-    return newInst;
+    return Promise.resolve(newInst);
   },
 
-  deleteInstitution: (instId: string): void => {
+  deleteInstitution: (instId: string): Promise<void> => {
     let insts = loadData<Institution>(STORAGE_KEYS.INSTITUTIONS, DEFAULT_INSTITUTIONS);
     let users = loadData<UserProfile>(STORAGE_KEYS.USERS, DEFAULT_USERS);
     let posts = loadData<Post>(STORAGE_KEYS.POSTS, DEFAULT_POSTS);
@@ -215,10 +215,11 @@ export const db = {
     saveData(STORAGE_KEYS.INSTITUTIONS, insts);
     saveData(STORAGE_KEYS.USERS, users);
     saveData(STORAGE_KEYS.POSTS, posts);
+    return Promise.resolve();
   },
 
   // Onboarding Requests
-  submitOnboardingRequest: (instituteName: string, email: string, contactName: string): void => {
+  submitOnboardingRequest: (instituteName: string, email: string, contactName: string): Promise<void> => {
     const reqs = loadData<OnboardingRequest>(STORAGE_KEYS.REQUESTS, DEFAULT_REQUESTS);
     reqs.push({
       id: `req_${Date.now()}`,
@@ -228,65 +229,67 @@ export const db = {
       status: 'PENDING'
     });
     saveData(STORAGE_KEYS.REQUESTS, reqs);
+    return Promise.resolve();
   },
 
-  getOnboardingRequests: (): OnboardingRequest[] => {
+  getOnboardingRequests: (): Promise<OnboardingRequest[]> => {
     const reqs = loadData<OnboardingRequest>(STORAGE_KEYS.REQUESTS, DEFAULT_REQUESTS);
-    return reqs.filter(r => r.status === 'PENDING');
+    return Promise.resolve(reqs.filter(r => r.status === 'PENDING'));
   },
 
-  approveRequest: (requestId: string): void => {
+  approveRequest: async (requestId: string): Promise<void> => {
     const reqs = loadData<OnboardingRequest>(STORAGE_KEYS.REQUESTS, DEFAULT_REQUESTS);
     const req = reqs.find(r => r.id === requestId);
     if (req) {
       req.status = 'APPROVED';
       saveData(STORAGE_KEYS.REQUESTS, reqs);
-      
+
       // Auto-create the institution
       const colors = ['#FF725E', '#4AA4F2', '#6C63FF', '#43D9AD', '#FFC75F'];
       const randomColor = colors[Math.floor(Math.random() * colors.length)];
-      db.createInstitution(
-        req.instituteName, 
-        req.instituteName.substring(0, 4).toUpperCase(), 
-        '', 
-        'Partner Institution', 
+      await db.createInstitution(
+        req.instituteName,
+        req.instituteName.substring(0, 4).toUpperCase(),
+        '',
+        'Partner Institution',
         randomColor
       );
     }
   },
 
   // --- Auth ---
-  loginStudent: (email: string, institutionId: string): { user: UserProfile | null, error?: string } => {
+  loginStudent: (email: string, password: string, institutionId: string): Promise<{ user: UserProfile | null, error?: string }> => {
     const users = loadData<UserProfile>(STORAGE_KEYS.USERS, DEFAULT_USERS);
     const user = users.find(u => u.role === UserRole.STUDENT && u.email === email && u.institutionId === institutionId);
     if (user) {
-      if (user.blocked) return { user: null, error: "Access Denied: Blocked." };
-      return { user };
+      if (user.blocked) return Promise.resolve({ user: null, error: "Access Denied: Blocked." });
+      return Promise.resolve({ user });
     }
-    return { user: null };
+    return Promise.resolve({ user: null });
   },
 
-  loginAlumni: (rollNo: string, institutionId: string): { user: UserProfile | null, error?: string } => {
+  loginAlumni: (email: string, password: string, institutionId: string): Promise<{ user: UserProfile | null, error?: string }> => {
     const users = loadData<UserProfile>(STORAGE_KEYS.USERS, DEFAULT_USERS);
-    const user = users.find(u => u.role === UserRole.ALUMNI && u.rollNo === rollNo && u.institutionId === institutionId);
+    // Flexible login: check email OR rollNo (for backward compat if needed, but UI sends email now)
+    const user = users.find(u => u.role === UserRole.ALUMNI && (u.email === email || u.rollNo === email) && u.institutionId === institutionId);
     if (user) {
-      if (user.blocked) return { user: null, error: "Access Denied: Blocked." };
-      return { user };
+      if (user.blocked) return Promise.resolve({ user: null, error: "Access Denied: Blocked." });
+      return Promise.resolve({ user });
     }
-    return { user: null };
+    return Promise.resolve({ user: null });
   },
 
-  loginInstAdmin: (password: string, institutionId: string): { user: UserProfile | null, error?: string } => {
-     const users = loadData<UserProfile>(STORAGE_KEYS.USERS, DEFAULT_USERS);
-     if (password === 'admin') {
-         const user = users.find(u => u.role === UserRole.INSTITUTION_ADMIN && u.institutionId === institutionId);
-         if (user) return { user };
-         return { user: null, error: "Admin account configuration error." };
-     }
-     return { user: null, error: "Invalid Admin Credentials" };
+  loginInstAdmin: (email: string, password: string, institutionId: string): Promise<{ user: UserProfile | null, error?: string }> => {
+    const users = loadData<UserProfile>(STORAGE_KEYS.USERS, DEFAULT_USERS);
+    if (password === 'admin') {
+      const user = users.find(u => u.role === UserRole.INSTITUTION_ADMIN && u.institutionId === institutionId);
+      if (user) return Promise.resolve({ user });
+      return Promise.resolve({ user: null, error: "Admin account configuration error." });
+    }
+    return Promise.resolve({ user: null, error: "Invalid Admin Credentials" });
   },
 
-  signupStudent: (institutionId: string, name: string, email: string, batch: string): UserProfile => {
+  signupStudent: (institutionId: string, name: string, email: string, batch: string, password: string): Promise<UserProfile> => {
     const users = loadData<UserProfile>(STORAGE_KEYS.USERS, DEFAULT_USERS);
     const newUser: UserProfile = {
       uid: `student_${Date.now()}`,
@@ -301,16 +304,17 @@ export const db = {
     };
     users.push(newUser);
     saveData(STORAGE_KEYS.USERS, users);
-    return newUser;
+    return Promise.resolve(newUser);
   },
 
-  signupAlumni: (institutionId: string, name: string, rollNo: string, batch: string, bio: string): UserProfile => {
+  signupAlumni: (institutionId: string, name: string, rollNo: string, batch: string, bio: string, email: string, password: string): Promise<UserProfile> => {
     const users = loadData<UserProfile>(STORAGE_KEYS.USERS, DEFAULT_USERS);
     const newUser: UserProfile = {
       uid: `alumni_${Date.now()}`,
       institutionId,
       name,
       rollNo,
+      email, // Saved email
       role: UserRole.ALUMNI,
       batch,
       avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`,
@@ -319,81 +323,82 @@ export const db = {
     };
     users.push(newUser);
     saveData(STORAGE_KEYS.USERS, users);
-    return newUser;
+    return Promise.resolve(newUser);
   },
 
-  updateUser: (uid: string, data: Partial<UserProfile>): UserProfile | null => {
+  updateUser: (uid: string, data: Partial<UserProfile>): Promise<UserProfile | null> => {
     const users = loadData<UserProfile>(STORAGE_KEYS.USERS, DEFAULT_USERS);
     const index = users.findIndex(u => u.uid === uid);
     if (index !== -1) {
       users[index] = { ...users[index], ...data };
       saveData(STORAGE_KEYS.USERS, users);
-      return users[index];
+      return Promise.resolve(users[index]);
     }
-    return null;
+    return Promise.resolve(null);
   },
 
   // --- User Mgmt ---
-  adminGetAllUsers: (institutionId: string): UserProfile[] => {
+  adminGetAllUsers: (institutionId: string): Promise<UserProfile[]> => {
     const users = loadData<UserProfile>(STORAGE_KEYS.USERS, DEFAULT_USERS);
-    return users.filter(u => u.institutionId === institutionId && u.role !== UserRole.INSTITUTION_ADMIN && u.role !== UserRole.SUPER_ADMIN);
+    return Promise.resolve(users.filter(u => u.institutionId === institutionId && u.role !== UserRole.INSTITUTION_ADMIN && u.role !== UserRole.SUPER_ADMIN));
   },
 
-  adminDeleteUser: (uid: string): void => {
+  adminDeleteUser: (uid: string): Promise<void> => {
     let users = loadData<UserProfile>(STORAGE_KEYS.USERS, DEFAULT_USERS);
     users = users.filter(u => u.uid !== uid);
     saveData(STORAGE_KEYS.USERS, users);
+    return Promise.resolve();
   },
 
-  adminToggleBlockUser: (uid: string): UserProfile | undefined => {
+  adminToggleBlockUser: (uid: string): Promise<UserProfile | undefined> => {
     const users = loadData<UserProfile>(STORAGE_KEYS.USERS, DEFAULT_USERS);
     const user = users.find(u => u.uid === uid);
     if (user) {
       user.blocked = !user.blocked;
       saveData(STORAGE_KEYS.USERS, users);
-      return user;
+      return Promise.resolve(user);
     }
-    return undefined;
+    return Promise.resolve(undefined);
   },
 
   // Networking
-  getAllUsers: (currentUserId: string, institutionId: string): UserProfile[] => {
+  getAllUsers: (currentUserId: string, institutionId: string): Promise<UserProfile[]> => {
     const users = loadData<UserProfile>(STORAGE_KEYS.USERS, DEFAULT_USERS);
-    return users.filter(u => 
-      u.institutionId === institutionId && 
-      u.uid !== currentUserId && 
-      u.role !== UserRole.INSTITUTION_ADMIN && 
+    return Promise.resolve(users.filter(u =>
+      u.institutionId === institutionId &&
+      u.uid !== currentUserId &&
+      u.role !== UserRole.INSTITUTION_ADMIN &&
       !u.blocked
-    );
+    ));
   },
 
-  getUserById: (uid: string): UserProfile | undefined => {
+  getUserById: (uid: string): Promise<UserProfile | undefined> => {
     const users = loadData<UserProfile>(STORAGE_KEYS.USERS, DEFAULT_USERS);
-    return users.find(u => u.uid === uid);
+    return Promise.resolve(users.find(u => u.uid === uid));
   },
 
   // Posts
-  getPosts: (institutionId: string, type: 'NEWSLETTER' | 'JOB' | 'EVENTS', onlyVerified: boolean = true): Post[] => {
+  getPosts: (institutionId: string, type: 'NEWSLETTER' | 'JOB' | 'EVENTS', onlyVerified: boolean = true): Promise<Post[]> => {
     const posts = loadData<Post>(STORAGE_KEYS.POSTS, DEFAULT_POSTS);
-    return posts.filter(p => {
+    return Promise.resolve(posts.filter(p => {
       const instMatch = p.institutionId === institutionId;
       const typeMatch = p.type === type;
       const statusMatch = onlyVerified ? p.status === 'VERIFIED' : true;
       return instMatch && typeMatch && statusMatch;
-    }).sort((a, b) => b.timestamp - a.timestamp);
+    }).sort((a, b) => b.timestamp - a.timestamp));
   },
 
-  getPendingPosts: (institutionId: string): Post[] => {
+  getPendingPosts: (institutionId: string): Promise<Post[]> => {
     const posts = loadData<Post>(STORAGE_KEYS.POSTS, DEFAULT_POSTS);
-    return posts.filter(p => p.institutionId === institutionId && p.status === 'PENDING');
+    return Promise.resolve(posts.filter(p => p.institutionId === institutionId && p.status === 'PENDING'));
   },
 
-  getUserPosts: (userId: string): Post[] => {
+  getUserPosts: (userId: string): Promise<Post[]> => {
     const posts = loadData<Post>(STORAGE_KEYS.POSTS, DEFAULT_POSTS);
-    return posts.filter(p => p.authorId === userId).sort((a, b) => b.timestamp - a.timestamp);
+    return Promise.resolve(posts.filter(p => p.authorId === userId).sort((a, b) => b.timestamp - a.timestamp));
   },
 
-  createPost: (post: Omit<Post, 'id' | 'timestamp' | 'likes' | 'comments' | 'status'>): void => {
+  createPost: (post: Omit<Post, 'id' | 'timestamp' | 'likes' | 'comments' | 'status'>): Promise<void> => {
     const posts = loadData<Post>(STORAGE_KEYS.POSTS, DEFAULT_POSTS);
     const newPost: Post = {
       ...post,
@@ -405,33 +410,37 @@ export const db = {
     };
     posts.unshift(newPost);
     saveData(STORAGE_KEYS.POSTS, posts);
+    return Promise.resolve();
   },
 
-  verifyPost: (postId: string): void => {
+  verifyPost: (postId: string): Promise<void> => {
     const posts = loadData<Post>(STORAGE_KEYS.POSTS, DEFAULT_POSTS);
     const post = posts.find(p => p.id === postId);
     if (post) {
       post.status = 'VERIFIED';
       saveData(STORAGE_KEYS.POSTS, posts);
     }
+    return Promise.resolve();
   },
 
-  deletePost: (postId: string): void => {
+  deletePost: (postId: string): Promise<void> => {
     let posts = loadData<Post>(STORAGE_KEYS.POSTS, DEFAULT_POSTS);
     posts = posts.filter(p => p.id !== postId);
     saveData(STORAGE_KEYS.POSTS, posts);
+    return Promise.resolve();
   },
 
-  toggleLike: (postId: string): void => {
+  toggleLike: (postId: string): Promise<void> => {
     const posts = loadData<Post>(STORAGE_KEYS.POSTS, DEFAULT_POSTS);
     const post = posts.find(p => p.id === postId);
     if (post) {
       post.likes += 1;
       saveData(STORAGE_KEYS.POSTS, posts);
     }
+    return Promise.resolve();
   },
 
-  addComment: (postId: string, userId: string, userName: string, text: string): Comment => {
+  addComment: (postId: string, userId: string, userName: string, text: string): Promise<Comment> => {
     const posts = loadData<Post>(STORAGE_KEYS.POSTS, DEFAULT_POSTS);
     const post = posts.find(p => p.id === postId);
     const newComment: Comment = {
@@ -446,29 +455,29 @@ export const db = {
       post.comments.push(newComment);
       saveData(STORAGE_KEYS.POSTS, posts);
     }
-    return newComment;
+    return Promise.resolve(newComment);
   },
 
   // --- Messaging (LocalStorage Persistent) ---
-  getMessages: (currentUserId: string, otherUserId: string): Message[] => {
+  getMessages: (currentUserId: string, otherUserId: string): Promise<Message[]> => {
     const messages = loadData<Message>(STORAGE_KEYS.MESSAGES, []);
-    return messages.filter(m => 
+    return Promise.resolve(messages.filter(m =>
       (m.senderId === currentUserId && m.receiverId === otherUserId) ||
       (m.senderId === otherUserId && m.receiverId === currentUserId)
-    ).sort((a, b) => a.timestamp - b.timestamp);
+    ).sort((a, b) => a.timestamp - b.timestamp));
   },
 
-  getConversations: (currentUserId: string): string[] => {
+  getConversations: (currentUserId: string): Promise<string[]> => {
     const messages = loadData<Message>(STORAGE_KEYS.MESSAGES, []);
     const userIds = new Set<string>();
     messages.forEach(m => {
       if (m.senderId === currentUserId) userIds.add(m.receiverId);
       if (m.receiverId === currentUserId) userIds.add(m.senderId);
     });
-    return Array.from(userIds);
+    return Promise.resolve(Array.from(userIds));
   },
 
-  sendMessage: (senderId: string, receiverId: string, text: string): void => {
+  sendMessage: (senderId: string, receiverId: string, text: string): Promise<void> => {
     const messages = loadData<Message>(STORAGE_KEYS.MESSAGES, []);
     messages.push({
       id: `m_${Date.now()}`,
@@ -479,5 +488,6 @@ export const db = {
       read: false
     });
     saveData(STORAGE_KEYS.MESSAGES, messages);
+    return Promise.resolve();
   }
 };
