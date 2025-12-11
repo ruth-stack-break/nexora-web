@@ -66,13 +66,21 @@ const CursorBloop = () => {
 // --- Components ---
 
 const PostCard: React.FC<{ post: Post, currentUser: UserProfile, onUpdate: () => void }> = ({ post, currentUser, onUpdate }) => {
-  const [isLiked, setIsLiked] = useState(false);
+  const [isLiked, setIsLiked] = useState<boolean>(
+    post.likedBy ? post.likedBy.includes(currentUser.uid) : false
+  );
+
+  // Sync local state if post updates from parent
+  useEffect(() => {
+    setIsLiked(post.likedBy ? post.likedBy.includes(currentUser.uid) : false);
+  }, [post, currentUser.uid]);
+
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
 
   const handleLike = async () => {
-    await db.toggleLike(post.id);
-    setIsLiked(true);
+    // Optimistic UI update could be added here, but for now we wait for DB
+    await db.toggleLike(post.id, currentUser.uid);
     onUpdate();
   };
 
@@ -129,7 +137,7 @@ const PostCard: React.FC<{ post: Post, currentUser: UserProfile, onUpdate: () =>
 
       <div className="flex items-center gap-6 pt-4 border-t border-slate-50">
         <button onClick={handleLike} className={`flex items-center gap-2 transition-colors font-bold text-sm group-hover:animate-bounce ${isLiked ? 'text-red-500' : 'text-slate-400 hover:text-red-500'}`}>
-          <Heart size={18} className={post.likes > 0 || isLiked ? "fill-current" : ""} /> {post.likes}
+          <Heart size={18} className={isLiked ? "fill-current" : ""} /> {post.likes}
         </button>
         <button onClick={() => setShowComments(!showComments)} className="flex items-center gap-2 text-slate-400 hover:text-brand-blue transition-colors font-bold text-sm">
           <MessageCircle size={18} /> {post.comments.length} Comments
@@ -552,6 +560,7 @@ const SuperAdminDashboard: React.FC<{ onExit: () => void }> = ({ onExit }) => {
   const [newInstCode, setNewInstCode] = useState('');
   const [newInstColor, setNewInstColor] = useState('#4AA4F2');
   const [newInstLogo, setNewInstLogo] = useState('');
+  const [newInstEmailDomain, setNewInstEmailDomain] = useState('');
 
   const refresh = async () => {
     setInstitutions(await db.getInstitutions());
@@ -576,9 +585,10 @@ const SuperAdminDashboard: React.FC<{ onExit: () => void }> = ({ onExit }) => {
 
   const handleCreateInstitution = async () => {
     if (!newInstName || !newInstCode) return alert("Name and Code are required");
-    await db.createInstitution(newInstName, newInstCode, newInstLogo, 'Newly Onboarded Institution', newInstColor);
+
+    await db.createInstitution(newInstName, newInstCode, newInstLogo, 'Newly Onboarded Institution', newInstColor, newInstEmailDomain);
     setShowAddModal(false);
-    setNewInstName(''); setNewInstCode(''); setNewInstColor('#4AA4F2'); setNewInstLogo('');
+    setNewInstName(''); setNewInstCode(''); setNewInstColor('#4AA4F2'); setNewInstLogo(''); setNewInstEmailDomain('');
     refresh();
   };
 
@@ -618,6 +628,7 @@ const SuperAdminDashboard: React.FC<{ onExit: () => void }> = ({ onExit }) => {
               <div>
                 <h3 className="font-bold text-2xl text-slate-800">{req.instituteName}</h3>
                 <p className="text-slate-500 mt-1 font-medium">Request from: <span className="text-slate-800">{req.contactName}</span> ({req.email})</p>
+                {req.emailDomain && <p className="text-blue-500 text-xs font-bold mt-1">Requested Domain: {req.emailDomain}</p>}
                 <div className="mt-2 inline-block px-3 py-1 bg-yellow-50 text-yellow-600 text-xs font-bold rounded-full">PENDING APPROVAL</div>
               </div>
               <div className="flex gap-3 w-full md:w-auto">
@@ -686,6 +697,12 @@ const SuperAdminDashboard: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                 <label className="text-xs font-bold text-slate-400 ml-2 mb-1 block uppercase">Logo URL (Optional)</label>
                 <input value={newInstLogo} onChange={e => setNewInstLogo(e.target.value)} placeholder="https://..." className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-slate-200 transition-colors text-sm" />
               </div>
+              <div className="bg-blue-50/50 p-2 rounded-2xl">
+                <label className="text-xs font-bold text-slate-400 ml-2 mb-1 block uppercase">Email Domain Limit (Optional)</label>
+                <input value={newInstEmailDomain} onChange={e => setNewInstEmailDomain(e.target.value)} placeholder="@university.edu or domain.com" className="w-full p-4 bg-white rounded-2xl font-bold outline-none border-2 border-transparent focus:border-brand-blue/30 transition-colors" />
+                <p className="text-[10px] text-slate-400 ml-2 mt-1">Leave empty to allow all emails.</p>
+              </div>
+
 
               <button onClick={handleCreateInstitution} className="w-full py-4 bg-brand-dark text-white rounded-2xl font-bold hover:bg-slate-800 shadow-xl mt-4 flex justify-center items-center gap-2">
                 <Rocket size={20} /> Launch Portal
@@ -709,6 +726,7 @@ const UnifiedPortal: React.FC<{ onSelect: (inst: Institution) => void, onSuperAd
   const [instName, setInstName] = useState('');
   const [contactName, setContactName] = useState('');
   const [email, setEmail] = useState('');
+  const [reqEmailDomain, setReqEmailDomain] = useState('');
 
   // Contact Us Form State
   const [supportName, setSupportName] = useState('');
@@ -717,7 +735,7 @@ const UnifiedPortal: React.FC<{ onSelect: (inst: Institution) => void, onSuperAd
   const [supportMessage, setSupportMessage] = useState('');
 
   const handleSubmitRequest = async () => {
-    await db.submitOnboardingRequest(instName, email, contactName);
+    await db.submitOnboardingRequest(instName, email, contactName, reqEmailDomain);
     setShowPartnerForm(false);
     alert("Request Submitted! Our team will contact you shortly.");
   };
@@ -937,6 +955,10 @@ const UnifiedPortal: React.FC<{ onSelect: (inst: Institution) => void, onSuperAd
               <input value={instName} onChange={e => setInstName(e.target.value)} placeholder="Institution Name" className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none border border-slate-100 focus:border-slate-300 transition-colors" />
               <input value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Contact Person" className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none border border-slate-100 focus:border-slate-300 transition-colors" />
               <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Official Email" className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none border border-slate-100 focus:border-slate-300 transition-colors" />
+              <div className="bg-slate-50 p-2 rounded-2xl">
+                <input value={reqEmailDomain} onChange={e => setReqEmailDomain(e.target.value)} placeholder="Email Domain (Optional, e.g. @university.edu)" className="w-full p-4 bg-white rounded-2xl font-bold outline-none border border-transparent focus:border-slate-300 transition-colors accent-brand-orange" />
+                <p className="text-[10px] text-slate-400 ml-2 mt-1">If set, users will be required to use this domain to sign up.</p>
+              </div>
               <button onClick={handleSubmitRequest} className="w-full py-4 bg-brand-dark text-white rounded-2xl font-bold hover:bg-slate-800 shadow-xl mt-2">Submit Request</button>
             </div>
           </div>
@@ -947,6 +969,7 @@ const UnifiedPortal: React.FC<{ onSelect: (inst: Institution) => void, onSuperAd
 };
 
 const App: React.FC = () => {
+  const [authLoading, setAuthLoading] = useState(true);
   const [currentInstitution, setCurrentInstitution] = useState<Institution | null>(null);
   const [isSuperAdminMode, setIsSuperAdminMode] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -990,16 +1013,40 @@ const App: React.FC = () => {
         }
         if (user.role === UserRole.SUPER_ADMIN) {
           setIsSuperAdminMode(true);
+        } else {
+          setIsSuperAdminMode(false);
         }
         setCurrentView(user.role === UserRole.INSTITUTION_ADMIN ? ViewType.ADMIN_DASHBOARD : ViewType.NEWSLETTER);
+        setAuthLoading(false);
       } else {
         setCurrentUser(null);
+        setIsSuperAdminMode(false);
         // Try to restore institution from local storage if no user
         const lastCode = localStorage.getItem('last_institution_code');
-        if (lastCode && !currentInstitution) {
-          const inst = await db.getInstitutionByCode(lastCode);
-          if (inst) setCurrentInstitution(inst);
+
+        // --- PERSISTENT AUTH IMPLEMENTATION ---
+        const savedUser = localStorage.getItem('squadran_current_user');
+        if (savedUser) {
+          const parsedUser = JSON.parse(savedUser);
+          // Validate if this user belongs to the current institution if set, or just load them
+          // Ideally we should re-verify with DB but for this mock we trust local storage or do a quick fetch
+          const userFromDb = await db.getUserById(parsedUser.uid);
+          if (userFromDb && !userFromDb.blocked) {
+            setCurrentUser(userFromDb);
+            if (userFromDb.role === UserRole.SUPER_ADMIN) setIsSuperAdminMode(true);
+
+            // Ensure institution is loaded for this user
+            if (userFromDb.institutionId && userFromDb.institutionId !== 'squadran' && !currentInstitution) {
+              const insts = await db.getInstitutions();
+              const userInst = insts.find(i => i.id === userFromDb.institutionId);
+              if (userInst) setCurrentInstitution(userInst);
+            }
+
+            setCurrentView(userFromDb.role === UserRole.INSTITUTION_ADMIN ? ViewType.ADMIN_DASHBOARD : ViewType.NEWSLETTER);
+          }
         }
+
+        setAuthLoading(false);
       }
     });
 
@@ -1015,6 +1062,8 @@ const App: React.FC = () => {
 
     return () => unsubscribe();
   }, []);
+
+
 
   useEffect(() => {
     refreshPosts();
@@ -1045,6 +1094,10 @@ const App: React.FC = () => {
   const handleSignup = async () => {
     if (!currentInstitution || !regName || !regBatch) return alert("Fill all fields");
 
+    if (regEmail && !db.validateEmailDomain(regEmail, currentInstitution.emailDomain)) {
+      return alert(`Access Denied: Email must match the domain policy: ${currentInstitution.emailDomain}`);
+    }
+
     let user: UserProfile | null = null;
     if (loginTab === 'STUDENT') {
       if (!regEmail) return alert("Email Required");
@@ -1061,6 +1114,28 @@ const App: React.FC = () => {
       setCurrentUser(user);
       setCurrentView(ViewType.NEWSLETTER);
       alert(`Welcome to ${currentInstitution.name}!`);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    if (!currentInstitution) return;
+
+    let role = UserRole.STUDENT;
+    if (loginTab === 'ALUMNI') role = UserRole.ALUMNI;
+    if (loginTab === 'ADMIN') {
+      return alert("Google Sign-In is for Students and Alumni only. Admins must login with email/password.");
+    }
+
+    const result = await db.loginWithGoogle(currentInstitution.id, role);
+
+    if (result.error) {
+      alert(result.error);
+    } else if (result.user) {
+      setCurrentUser(result.user);
+      setCurrentView(ViewType.NEWSLETTER);
+      if (result.isNewUser) {
+        alert(`Welcome to ${currentInstitution.name}! Your account has been created successfully.`);
+      }
     }
   };
 
@@ -1112,14 +1187,28 @@ const App: React.FC = () => {
       if (window.confirm("Return to Home Page? You will be logged out.")) {
         setCurrentUser(null);
         setCurrentInstitution(null);
+        setIsSuperAdminMode(false);
       }
     } else {
       setCurrentInstitution(null);
+      setIsSuperAdminMode(false);
     }
   };
 
   // --- SUPER ADMIN DASHBOARD ---
   // Priority 1: Check if in Super Admin Mode
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
+        <div className="animate-pulse flex flex-col items-center">
+          <div className="h-12 w-12 bg-slate-300 rounded-full mb-4"></div>
+          <div className="h-4 w-32 bg-slate-300 rounded"></div>
+          <div className="text-slate-400 font-bold text-sm mt-4">Initializing Squadran...</div>
+        </div>
+      </div>
+    );
+  }
+
   if (isSuperAdminMode) {
     return (
       <div className="min-h-screen bg-slate-50">
@@ -1208,6 +1297,14 @@ const App: React.FC = () => {
                 </>
               )}
             </div>
+
+            {loginTab !== 'ADMIN' && (
+              <div className="mt-4">
+                <button onClick={handleGoogleLogin} className="w-full py-4 bg-slate-100 text-slate-800 rounded-2xl font-bold hover:bg-slate-200 transition-all flex justify-center items-center gap-2">
+                  <img src="https://cdn-icons-png.flaticon.com/512/300/300221.png" className="w-5 h-5" alt="G" /> Sign in with Google
+                </button>
+              </div>
+            )}
 
             {loginTab !== 'ADMIN' && (
               <div className="text-center mt-6">

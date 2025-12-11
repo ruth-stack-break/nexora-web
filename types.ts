@@ -28,6 +28,7 @@ export interface Institution {
   logo: string;
   description: string;
   themeColor: string;
+  emailDomain?: string;
 }
 
 export interface OnboardingRequest {
@@ -35,6 +36,7 @@ export interface OnboardingRequest {
   instituteName: string;
   email: string;
   contactName: string;
+  emailDomain?: string; // Optional domain request
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
 }
 
@@ -79,6 +81,7 @@ export interface Post {
   title?: string;
   image?: string;
   likes: number;
+  likedBy?: string[]; // Array of user IDs who liked the post
   comments: Comment[];
   status: 'PENDING' | 'VERIFIED';
   type: 'NEWSLETTER' | 'JOB' | 'EVENTS';

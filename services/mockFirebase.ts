@@ -141,8 +141,34 @@ const DEFAULT_REQUESTS: OnboardingRequest[] = [
 
 export const db = {
   // --- Squadran Super Admin ---
+  seedDefaults: () => Promise.resolve(), // Mock: Defaults are static
   loginSuperAdmin: (password: string): Promise<boolean> => {
     return Promise.resolve(password === 'squadran_root');
+  },
+
+  // --- Auth State & Persistence (Mock) ---
+  subscribeToAuth: (callback: (user: UserProfile | null) => void) => {
+    // Check local storage for existing session
+    const savedUser = localStorage.getItem('squadran_current_user');
+    if (savedUser) {
+      try {
+        const user = JSON.parse(savedUser);
+        // Verify user against "DB"
+        const users = loadData<UserProfile>(STORAGE_KEYS.USERS, DEFAULT_USERS);
+        const validUser = users.find(u => u.uid === user.uid);
+        if (validUser && !validUser.blocked) {
+          callback(validUser);
+          return () => { };
+        }
+      } catch (e) { console.error("Auth Load Error", e); }
+    }
+    callback(null);
+    return () => { };
+  },
+
+  logout: async () => {
+    localStorage.removeItem('squadran_current_user');
+    return Promise.resolve();
   },
 
   getInstitutions: (): Promise<Institution[]> => {
@@ -281,7 +307,7 @@ export const db = {
 
   loginInstAdmin: (email: string, password: string, institutionId: string): Promise<{ user: UserProfile | null, error?: string }> => {
     const users = loadData<UserProfile>(STORAGE_KEYS.USERS, DEFAULT_USERS);
-    if (password === 'admin') {
+    if (email === 'admin@nexora.com' && password === 'admin') {
       const user = users.find(u => u.role === UserRole.INSTITUTION_ADMIN && u.institutionId === institutionId);
       if (user) return Promise.resolve({ user });
       return Promise.resolve({ user: null, error: "Admin account configuration error." });
@@ -406,6 +432,7 @@ export const db = {
       timestamp: Date.now(),
       likes: 0,
       comments: [],
+      likedBy: [],
       status: 'PENDING'
     };
     posts.unshift(newPost);
@@ -430,11 +457,21 @@ export const db = {
     return Promise.resolve();
   },
 
-  toggleLike: (postId: string): Promise<void> => {
+  toggleLike: (postId: string, userId: string): Promise<void> => {
     const posts = loadData<Post>(STORAGE_KEYS.POSTS, DEFAULT_POSTS);
     const post = posts.find(p => p.id === postId);
     if (post) {
-      post.likes += 1;
+      if (!post.likedBy) post.likedBy = [];
+      const index = post.likedBy.indexOf(userId);
+      if (index === -1) {
+        // Like
+        post.likedBy.push(userId);
+        post.likes = (post.likes || 0) + 1;
+      } else {
+        // Unlike
+        post.likedBy.splice(index, 1);
+        post.likes = Math.max(0, (post.likes || 0) - 1);
+      }
       saveData(STORAGE_KEYS.POSTS, posts);
     }
     return Promise.resolve();
